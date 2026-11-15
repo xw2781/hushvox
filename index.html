@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!--CSP-->
+  <title>HushVox — Remove background noise from voice recordings, privately in your browser</title>
+  <meta name="description" content="Free, open-source voice noise remover. Clean up speech recordings with the DeepFilterNet3 neural network running as WebAssembly in your browser. No upload, no sign-up." />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f2ea" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1514" />
+  <meta name="color-scheme" content="light dark" />
+  <link rel="canonical" href="__SITE_URL__" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="HushVox" />
+  <meta property="og:title" content="HushVox — Remove background noise from voice, privately in your browser" />
+  <meta property="og:description" content="Free, open-source speech enhancement. DeepFilterNet3 runs locally as WebAssembly — your audio never leaves your device." />
+  <meta property="og:url" content="__SITE_URL__" />
+  <meta property="og:image" content="__SITE_URL__og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="HushVox logo and the tagline: noise out, voice in, nothing uploaded." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="HushVox — private, in-browser voice noise removal" />
+  <meta name="twitter:description" content="Free and open source. Your audio never leaves your device." />
+  <meta name="twitter:image" content="__SITE_URL__og-image.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "HushVox",
+    "url": "__SITE_URL__",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Any modern web browser",
+    "description": "Open-source, in-browser voice noise removal using the DeepFilterNet3 model compiled to WebAssembly. Audio is processed locally and never uploaded.",
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+  <!--FAQ-JSONLD-->
+</head>
+<body>
+  <a class="skip" href="#tool">Skip to the tool</a>
+  <header class="top">
+    <a class="brand" href="#top" aria-label="HushVox home">
+      <img src="/favicon.svg" alt="" width="28" height="28" />
+      <span>HushVox</span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="h1">
+      <h1 id="h1">Take the noise out of your voice recordings.</h1>
+      <p class="lede">A free, open-source speech denoiser that runs entirely in your browser. Drop in a recording, hear the difference, download the result.</p>
+
+      <div class="tool" id="tool">
+        <!-- Idle -->
+        <div id="state-idle" class="state">
+          <label class="drop" id="drop" for="file">
+            <svg class="drop-icon" viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><path d="M8 24v0M14 18v12M20 10v28M26 16v16M32 21v6M38 24v0" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></svg>
+            <span class="drop-title">Drop an audio or video file here</span>
+            <span class="drop-sub">or <span class="link">choose a file</span> · WAV, MP3, M4A, OGG, FLAC, WebM, MP4</span>
+            <input id="file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.oga,.opus,.flac,.webm,.mp4,.mov" />
+          </label>
+          <div class="adv">
+            <label for="atten-idle">Max noise reduction</label>
+            <select id="atten-idle" class="atten">
+              <option value="100">Full (default)</option>
+              <option value="24">Moderate (24 dB)</option>
+              <option value="12">Gentle (12 dB)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Busy -->
+        <div id="state-busy" class="state" hidden>
+          <p class="busy-file" id="busy-file"></p>
+          <h2 class="busy-title" id="busy-title" aria-live="polite">Working…</h2>
+          <div class="bar" id="bar" role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="bar-fill" id="bar-fill"></div></div>
+          <p class="busy-detail" id="busy-detail"></p>
+          <button class="btn ghost" id="cancel" type="button">Cancel</button>
+        </div>
+
+        <!-- Result -->
+        <div id="state-result" class="state" hidden>
+          <div class="result-head">
+            <div>
+              <p class="result-name" id="result-name"></p>
+              <p class="result-meta" id="result-meta"></p>
+            </div>
+            <button class="btn ghost small" id="another" type="button">Process another file</button>
+          </div>
+
+          <div class="wave-wrap" id="wave-wrap">
+            <div class="wave-row"><span class="wave-label">Original</span><canvas id="wave-a" aria-hidden="true"></canvas></div>
+            <div class="wave-row"><span class="wave-label">Enhanced</span><canvas id="wave-b" aria-hidden="true"></canvas></div>
+            <div class="playhead" id="playhead" aria-hidden="true"></div>
+            <input id="seek" class="seek" type="range" min="0" max="1000" value="0" aria-label="Seek" />
+          </div>
+
+          <div class="transport">
+            <button class="btn play" id="play" type="button" aria-label="Play">
+              <svg id="icon-play" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>
+              <svg id="icon-pause" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" hidden><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="currentColor"/></svg>
+            </button>
+            <span class="time"><span id="time-now">0:00</span> / <span id="time-total">0:00</span></span>
+            <div class="seg" role="radiogroup" aria-label="Listen to">
+              <input type="radio" name="ab" id="ab-a" value="original" />
+              <label for="ab-a">Original <kbd>A</kbd></label>
+              <input type="radio" name="ab" id="ab-b" value="enhanced" checked />
+              <label for="ab-b">Enhanced <kbd>B</kbd></label>
+            </div>
+          </div>
+
+          <div class="controls">
+            <div class="ctl">
+              <label for="strength">Strength <output id="strength-out" for="strength">100%</output></label>
+              <input id="strength" type="range" min="0" max="100" value="100" step="1" />
+              <p class="hint">Blends the original back in. Applied live and to exports — no reprocessing.</p>
+            </div>
+            <div class="ctl">
+              <label for="atten-result">Max noise reduction</label>
+              <select id="atten-result" class="atten">
+                <option value="100">Full (default)</option>
+                <option value="24">Moderate (24 dB)</option>
+                <option value="12">Gentle (12 dB)</option>
+              </select>
+              <p class="hint">Changing this re-runs the model on your file.</p>
+            </div>
+          </div>
+
+          <div class="export">
+            <button class="btn primary" id="dl-wav" type="button">Download WAV</button>
+            <button class="btn" id="dl-mp3" type="button">Download MP3</button>
+            <span class="export-status" id="export-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <!-- Error -->
+        <div id="state-error" class="state" hidden>
+          <h2 class="busy-title">That didn’t work</h2>
+          <p class="error-msg" id="error-msg" role="alert"></p>
+          <button class="btn" id="error-back" type="button">Try another file</button>
+        </div>
+      </div>
+
+      <p class="privacy-note"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Files never leave your device. No upload, no account, no analytics.</p>
+    </section>
+
+    <div class="content">
+      <section id="how" aria-labelledby="h-how">
+        <h2 id="h-how">How it works</h2>
+        <p>HushVox runs <a href="https://github.com/Rikorose/DeepFilterNet">DeepFilterNet3</a>, a small neural network designed for real-time speech enhancement, compiled to WebAssembly. When you add a file, your browser decodes it, converts it to 48&nbsp;kHz, and feeds it through the model in a background thread, a couple of seconds at a time. The model estimates which parts of the spectrum are speech and which are noise, and attenuates the rest.</p>
+        <ol class="steps">
+          <li><strong>Decode.</strong> Your browser’s built-in decoder reads the file; video files work if the browser can read their audio track.</li>
+          <li><strong>Enhance.</strong> The model processes each channel at 48&nbsp;kHz. It has about 30&nbsp;ms of built-in latency, which HushVox compensates so the result lines up sample-for-sample with the original.</li>
+          <li><strong>Compare and mix.</strong> Switch between original and enhanced at the same playhead position, and use the Strength slider to blend some of the original back in.</li>
+          <li><strong>Export.</strong> Download 16-bit WAV or MP3 at 48&nbsp;kHz with the same channel count as the source.</li>
+        </ol>
+      </section>
+
+      <section id="privacy" aria-labelledby="h-priv">
+        <h2 id="h-priv">Privacy</h2>
+        <p>Your audio is decoded, processed and exported in your browser tab. There is no server-side component: this is a static site. The page makes no analytics calls and loads no third-party scripts, fonts or images, and its Content Security Policy only allows requests to its own origin. The only download is the model itself (about 12&nbsp;MB compressed), which your browser keeps in its cache after the first use.</p>
+      </section>
+
+      <section id="compare" aria-labelledby="h-cmp">
+        <h2 id="h-cmp">Local vs. cloud enhancers</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col"></th><th scope="col">HushVox (local)</th><th scope="col">Typical cloud enhancer</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Where audio is processed</th><td>On your device</td><td>On the provider’s servers</td></tr>
+              <tr><th scope="row">Upload required</th><td>No</td><td>Yes</td></tr>
+              <tr><th scope="row">Account / sign-up</th><td>No</td><td>Usually</td></tr>
+              <tr><th scope="row">Works offline after first load</th><td>Mostly (the model is cached by your browser)</td><td>No</td></tr>
+              <tr><th scope="row">Model size / approach</th><td>Small noise suppressor (DeepFilterNet3)</td><td>Varies; some use larger generative models that can resynthesize a voice</td></tr>
+              <tr><th scope="row">Speed</th><td>Depends on your device’s CPU</td><td>Depends on the provider’s queue and your connection</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small">HushVox is a noise suppressor. It removes noise rather than re-creating a studio voice, so on very noisy input the result can sound slightly processed. We make no claim that it matches any particular commercial product.</p>
+      </section>
+
+      <section id="faq" aria-labelledby="h-faq">
+        <h2 id="h-faq">FAQ</h2>
+        <div class="faq">
+          <details>
+            <summary>Which file formats work?</summary>
+            <p>Anything your browser can decode: typically WAV, MP3, M4A/AAC, OGG/Opus, FLAC and WebM, plus the audio track of many MP4/MOV/WebM videos. If a file can’t be decoded, HushVox says so instead of failing silently. Exports are WAV (16-bit PCM) or MP3 (192&nbsp;kbps).</p>
+          </details>
+          <details>
+            <summary>How long can a file be?</summary>
+            <p>There is no fixed limit, but the audio is held in memory as 32-bit floats at 48&nbsp;kHz (roughly 0.7&nbsp;GB per hour per channel, for the original plus the enhanced copy), so very long files may fail on phones or low-memory machines. Processing runs in chunks with a progress bar and a Cancel button. If you have a multi-hour recording, splitting it is the safer route.</p>
+          </details>
+          <details>
+            <summary>Why 48&nbsp;kHz?</summary>
+            <p>DeepFilterNet3 was trained for 48&nbsp;kHz audio, so files are resampled to 48&nbsp;kHz before processing and exported at 48&nbsp;kHz. Content above the original file’s bandwidth is not invented: a 16&nbsp;kHz recording stays band-limited.</p>
+          </details>
+          <details>
+            <summary>Is my audio uploaded anywhere?</summary>
+            <p>No. All processing happens locally in your browser, and the page is built so that it cannot contact other servers. You can verify this in your browser’s network tools.</p>
+          </details>
+          <details>
+            <summary>What are its limits?</summary>
+            <p>It is a noise suppressor, not a magic studio-voice generator. It is built for speech: music and other non-speech sounds are treated as noise and are not preserved. Heavy noise, strong reverb, or several people talking at once can leave artifacts, and the voice may sound slightly processed. For already-clean recordings it will add little and may make things worse. Use the Strength slider or the Max noise reduction setting to dial it back.</p>
+          </details>
+          <details>
+            <summary>Why does the first run download about 12&nbsp;MB?</summary>
+            <p>The neural network is embedded in a WebAssembly file (about 34&nbsp;MB uncompressed, about 12&nbsp;MB transferred with compression). It is fetched only when you first process a file and then cached by your browser, so later runs start immediately.</p>
+          </details>
+          <details>
+            <summary>Is it free? What is the license?</summary>
+            <p>Yes. HushVox is released under the MIT license. The DeepFilterNet3 model and code are dual-licensed MIT or Apache-2.0. MP3 export uses LAME (LGPL), loaded only when you export an MP3. See the credits below.</p>
+          </details>
+        </div>
+      </section>
+
+      <section id="shortcuts" aria-labelledby="h-keys">
+        <h2 id="h-keys">Keyboard shortcuts</h2>
+        <dl class="keys">
+          <div><dt><kbd>Space</kbd></dt><dd>Play / pause</dd></div>
+          <div><dt><kbd>A</kbd></dt><dd>Listen to the original</dd></div>
+          <div><dt><kbd>B</kbd></dt><dd>Listen to the enhanced version</dd></div>
+          <div><dt><kbd>X</kbd></dt><dd>Toggle original / enhanced</dd></div>
+          <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Seek 5 seconds</dd></div>
+        </dl>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <p><strong>HushVox</strong> is open source under the <a href="https://opensource.org/licenses/MIT">MIT license</a>.</p>
+    <p class="small">Credits: <a href="https://github.com/Rikorose/DeepFilterNet">DeepFilterNet</a> by Hendrik Schröter and contributors (MIT OR Apache-2.0); WebAssembly build packaged by <a href="https://github.com/lofcz/DeepFilterNet">lofcz</a>; MP3 encoding by <a href="https://lame.sourceforge.io/">LAME</a> (LGPL) via <a href="https://github.com/arseneyr/wasm-media-encoders">wasm-media-encoders</a>. Full notices are in the NOTICE file of the repository.</p>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

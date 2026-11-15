@@ -1,0 +1,23 @@
+{
+  "name": "hushvox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lofcz/deepfilternet-web": "^0.1.0",
+    "wasm-media-encoders": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "playwright": "^1.65.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8"
+  }
+}
