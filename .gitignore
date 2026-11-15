@@ -1,0 +1,10 @@
+node_modules
+dist
+tests/local-fixtures
+test-results
+playwright-report
+*.log
+.DS_Store
+# large generated outputs
+out/
+tests/out/
