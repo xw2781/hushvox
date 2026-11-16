@@ -109,17 +109,17 @@ export function probeDuration(file) {
   return Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString().trim());
 }
 
-/** Install before page.goto: records when the "Removing noise…" phase starts and the result appears. */
+/** Install before page.goto: records when the processing phase (data-phase) starts and the result appears. */
 export const MARKS_SCRIPT = () => {
   window.__marks = {};
   const watch = () => {
     const title = document.getElementById('busy-title'), result = document.getElementById('state-result');
     if (!title || !result) return requestAnimationFrame(watch);
     const upd = () => {
-      if (title.textContent === 'Removing noise…' && !window.__marks.procStart) window.__marks.procStart = performance.now();
+      if (title.dataset.phase === 'processing' && !window.__marks.procStart) window.__marks.procStart = performance.now();
       if (!result.hidden && !window.__marks.done) window.__marks.done = performance.now();
     };
-    new MutationObserver(upd).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+    new MutationObserver(upd).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'data-phase'] });
   };
   document.addEventListener('DOMContentLoaded', watch);
 };

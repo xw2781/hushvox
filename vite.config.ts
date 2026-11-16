@@ -24,7 +24,7 @@ function siteFiles(): Plugin {
       let out = html.replaceAll('__SITE_URL__', SITE_URL);
       // Dev server injects inline <style>/HMR sockets, so the strict CSP is applied to builds only.
       out = out.replace('<!--CSP-->', ctx.server ? '' : `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`);
-      const faqs = [...out.matchAll(/<details>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/g)].map((m) => ({
+      const faqs = [...out.matchAll(/<details>\s*<summary[^>]*>([\s\S]*?)<\/summary>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/details>/g)].map((m) => ({
         '@type': 'Question',
         name: plain(m[1]),
         acceptedAnswer: { '@type': 'Answer', text: plain(m[2]) },

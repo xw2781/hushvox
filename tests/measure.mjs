@@ -14,7 +14,7 @@ const context = await browser.newContext({ acceptDownloads: true });
 await context.addInitScript(MARKS_SCRIPT);
 const reqs = watchRequests(context, srv.url);
 const page = await context.newPage();
-await page.goto(srv.url + '/');
+await page.goto(srv.url + '/?lang=en');
 const version = browser.version();
 
 // Peak RSS of the whole browser process tree (sampled; shared pages are counted per process, so this over-estimates).

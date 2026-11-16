@@ -1,4 +1,5 @@
 import wasmUrl from '@lofcz/deepfilternet-web/df_bg.wasm?url';
+import { AppError } from './errors';
 import { SAMPLE_RATE, type FromWorker, type ToWorker } from './protocol';
 
 export interface Progress {
@@ -90,10 +91,10 @@ export function denoise(input: AudioBuffer, attenLimit: number, onProgress: (p: 
         }
       } else if (m.type === 'error') {
         worker.terminate();
-        reject(new Error(m.message));
+        reject(m.code ? new AppError(m.code, m.params, m.message) : new Error(m.message));
       }
     };
-    worker.onerror = (ev) => { worker.terminate(); reject(new Error(ev.message || 'Worker failed')); };
+    worker.onerror = (ev) => { worker.terminate(); reject(new AppError('worker', {}, ev.message || 'Worker failed')); };
     send({ type: 'init', wasmUrl, channels, lengths: new Array(channels).fill(length), attenLimit });
   });
 

@@ -1,3 +1,5 @@
+import type { ErrorCode, ErrorParams } from './errors';
+
 export const SAMPLE_RATE = 48000;
 /** Algorithmic latency of DeepFilterNet3 (measured by cross-correlation: 3 hops of 480 samples = 30 ms). */
 export const LATENCY_SAMPLES = 1440;
@@ -12,4 +14,4 @@ export type FromWorker =
   | { type: 'model-progress'; loaded: number; total: number; cached: boolean }
   | { type: 'ready' }
   | { type: 'chunk'; ch: number; data: Float32Array; last: boolean }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; code?: ErrorCode; params?: ErrorParams };

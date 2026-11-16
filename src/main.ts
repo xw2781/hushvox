@@ -1,5 +1,7 @@
 import './style.css';
-import { decodeFile, DecodeError } from './audio/decode';
+import { decodeFile } from './audio/decode';
+import { AppError } from './audio/errors';
+import { t, getLang, setLang, chooseLang, resolveLang, parseLang, onLangChange } from './i18n';
 import { denoise, CancelledError, type Job, type Progress } from './audio/denoise';
 import { ABPlayer, type Source } from './audio/player';
 import { computePeaks, drawPeaks } from './audio/peaks';
@@ -36,6 +38,30 @@ let job: Job | null = null;
 let runId = 0;
 let atten = 100;
 
+// ---- translated dynamic text ------------------------------------------------------------
+// Anything shown on screen that depends on state is kept as a function and re-rendered when the language changes.
+type Msg = () => string;
+let busyMsg: { title: Msg; detail: Msg } = { title: () => t('busy.starting'), detail: () => '' };
+let phase = '';
+function renderBusy() {
+  el.busyTitle.textContent = busyMsg.title();
+  el.busyTitle.dataset.phase = phase;
+  el.busyDetail.textContent = busyMsg.detail();
+}
+function setBusy(title: Msg, detail: Msg, ph = '') {
+  busyMsg = { title, detail };
+  phase = ph;
+  renderBusy();
+}
+let exportMsg: Msg | null = null;
+function setExport(m: Msg | null) {
+  exportMsg = m;
+  el.exportStatus.textContent = m ? m() : '';
+}
+let lastError: unknown = null;
+const errText = (e: unknown) => e instanceof AppError ? t(e.key, e.params) : t('err.generic', { msg: e instanceof Error ? e.message : String(e) });
+function renderError() { if (lastError !== null) el.errorMsg.textContent = errText(lastError); }
+
 // ---- progress UI ----------------------------------------------------------
 function setBar(frac: number | null) {
   el.bar.classList.toggle('indeterminate', frac === null);
@@ -48,20 +74,23 @@ function setBar(frac: number | null) {
 function onProgress(p: Progress) {
   if (p.phase === 'model') {
     if (p.cached) {
-      el.busyTitle.textContent = 'Loading model…';
-      el.busyDetail.textContent = 'From your browser’s cache';
+      setBusy(() => t('busy.modelCached'), () => t('busy.modelCachedDetail'));
       setBar(null);
     } else {
-      el.busyTitle.textContent = 'Loading model (12 MB, cached after first time)';
-      el.busyDetail.textContent = `${p.loadedMB!.toFixed(0)} of ${p.totalMB!.toFixed(0)} MB (uncompressed size)`;
+      const loaded = p.loadedMB!.toFixed(0), total = p.totalMB!.toFixed(0);
+      setBusy(() => t('busy.model'), () => t('busy.modelDetail', { loaded, total }));
       setBar(p.fraction);
     }
   } else {
-    el.busyTitle.textContent = 'Removing noise…';
     setBar(p.fraction);
-    el.busyDetail.textContent = p.speed
-      ? `${Math.round(p.fraction * 100)}% · ${p.speed.toFixed(1)}× realtime · about ${fmtEta(p.etaSec ?? NaN)} left`
-      : 'Starting…';
+    const speed = p.speed;
+    setBusy(
+      () => t('busy.removing'),
+      () => speed
+        ? t('busy.progress', { pct: Math.round(p.fraction * 100), speed: speed.toFixed(1), eta: fmtEta(p.etaSec ?? NaN) })
+        : t('busy.starting'),
+      'processing',
+    );
   }
 }
 
@@ -70,8 +99,7 @@ async function handleFile(file: File) {
   const my = ++runId;
   teardown();
   el.busyFile.textContent = file.name;
-  el.busyTitle.textContent = 'Reading audio…';
-  el.busyDetail.textContent = 'Decoding and converting to 48 kHz';
+  setBusy(() => t('busy.reading'), () => t('busy.decoding'));
   setBar(null);
   show('busy');
   try {
@@ -89,8 +117,7 @@ async function handleFile(file: File) {
 async function run(my: number) {
   const s = session!;
   setBar(null);
-  el.busyTitle.textContent = 'Starting…';
-  el.busyDetail.textContent = '';
+  setBusy(() => t('busy.starting'), () => '');
   show('busy');
   player?.pause();
   job = denoise(s.dry, atten, onProgress);
@@ -108,7 +135,8 @@ async function run(my: number) {
 
 function fail(e: unknown) {
   console.error(e);
-  el.errorMsg.textContent = e instanceof DecodeError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
+  lastError = e;
+  renderError();
   show('error');
 }
 
@@ -146,6 +174,12 @@ function schedulePeaks() {
 }
 const strength = () => Number(el.strength.value) / 100;
 
+function renderMeta() {
+  if (!session) return;
+  const dur = session.dry.length / SAMPLE_RATE;
+  el.resultMeta.textContent = t('result.meta', { dur: fmtTime(dur), channels: t(session.dry.numberOfChannels === 1 ? 'result.mono' : 'result.stereo') });
+}
+
 function showResult(s: Session) {
   if (!player) {
     player = new ABPlayer();
@@ -156,10 +190,10 @@ function showResult(s: Session) {
   player.setStrength(strength());
   player.setSource(el.abA.checked ? 'original' : 'enhanced');
   el.resultName.textContent = s.name;
-  el.resultMeta.textContent = `${fmtTime(dur)} · ${s.dry.numberOfChannels === 1 ? 'mono' : 'stereo'} · 48 kHz`;
+  renderMeta();
   el.timeTotal.textContent = fmtTime(dur);
   el.attenResult.value = String(atten);
-  el.exportStatus.textContent = '';
+  setExport(null);
   show('result');
   computeWaves();
   redrawWaves();
@@ -172,7 +206,7 @@ function syncUi() {
   if (!p) return;
   el.iconPlay.hidden = p.playing;
   el.iconPause.hidden = !p.playing;
-  el.play.setAttribute('aria-label', p.playing ? 'Pause' : 'Play');
+  el.play.setAttribute('aria-label', t(p.playing ? 'pause' : 'play'));
   const pos = p.position, dur = p.duration || 1;
   el.timeNow.textContent = fmtTime(pos);
   const w = el.waveWrap.clientWidth - 20;
@@ -198,9 +232,12 @@ el.seek.addEventListener('input', async () => {
   await player.seek((Number(el.seek.value) / 1000) * player.duration);
   syncUi();
 });
-el.strength.addEventListener('input', () => {
+function renderStrength() {
   el.strengthOut.textContent = `${el.strength.value}%`;
-  el.strength.setAttribute('aria-valuetext', `${el.strength.value} percent`);
+  el.strength.setAttribute('aria-valuetext', t('strength.valuetext', { n: el.strength.value }));
+}
+el.strength.addEventListener('input', () => {
+  renderStrength();
   player?.setStrength(strength());
   schedulePeaks();
 });
@@ -211,10 +248,10 @@ async function exportAs(kind: 'wav' | 'mp3') {
   const s = session;
   el.dlWav.disabled = el.dlMp3.disabled = true;
   const label = kind.toUpperCase();
-  el.exportStatus.textContent = kind === 'mp3' ? 'Loading MP3 encoder…' : 'Preparing WAV…';
+  setExport(() => t(kind === 'mp3' ? 'export.loadMp3' : 'export.prepWav'));
   try {
     const mix = makeMixer(s.dry, s.wet, strength());
-    const prog = (f: number) => { el.exportStatus.textContent = `Encoding ${label}… ${Math.round(f * 100)}%`; };
+    const prog = (f: number) => setExport(() => t('export.encoding', { fmt: label, pct: Math.round(f * 100) }));
     let blob: Blob;
     if (kind === 'wav') blob = await encodeWav(s.dry.numberOfChannels, s.dry.length, mix, prog);
     else {
@@ -222,10 +259,12 @@ async function exportAs(kind: 'wav' | 'mp3') {
       blob = await encodeMp3(s.dry.numberOfChannels, s.dry.length, mix, prog);
     }
     download(blob, `${s.name}-hushvox.${kind}`);
-    el.exportStatus.textContent = `${label} ready (${(blob.size / 1048576).toFixed(1)} MB)`;
+    const size = (blob.size / 1048576).toFixed(1);
+    setExport(() => t('export.ready', { fmt: label, size }));
   } catch (e) {
     console.error(e);
-    el.exportStatus.textContent = `Export failed: ${e instanceof Error ? e.message : String(e)}`;
+    const err = e;
+    setExport(() => t('export.failed', { msg: err instanceof AppError ? t(err.key, err.params) : err instanceof Error ? err.message : String(err) }));
   } finally {
     el.dlWav.disabled = el.dlMp3.disabled = false;
   }
@@ -294,3 +333,20 @@ window.addEventListener('keydown', (e) => {
     void player.seek(player.position + (e.key === 'ArrowRight' ? 5 : -5)).then(syncUi);
   }
 });
+
+// ---- language ------------------------------------------------------------------------------
+const langSelect = $<HTMLSelectElement>('lang');
+onLangChange(() => {
+  langSelect.value = getLang();
+  renderBusy();
+  renderError();
+  renderMeta();
+  renderStrength();
+  setExport(exportMsg);
+  syncUi();
+});
+langSelect.addEventListener('change', () => {
+  const l = parseLang(langSelect.value);
+  if (l) chooseLang(l);
+});
+setLang(resolveLang());

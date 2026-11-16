@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { DeepFilter } from '@lofcz/deepfilternet-web';
 import { LATENCY_SAMPLES, MODEL_BYTES, type FromWorker, type ToWorker } from './protocol';
+import { AppError } from './errors';
 
 const post = (m: FromWorker, t: Transferable[] = []) => (self as unknown as Worker).postMessage(m, t);
 const CACHE = 'hushvox-model-v1';
@@ -19,7 +20,7 @@ async function loadModelBytes(url: string): Promise<{ bytes: Uint8Array; cached:
     cache = null; // Cache API unavailable (e.g. private mode): just download.
   }
   const res = await fetch(url);
-  if (!res.ok || !res.body) throw new Error(`Could not download the model (HTTP ${res.status}).`);
+  if (!res.ok || !res.body) throw new AppError('model', { status: res.status }, `Could not download the model (HTTP ${res.status}).`);
   const headerLen = Number(res.headers.get('content-length')) || 0;
   const total = headerLen > MODEL_BYTES * 0.5 ? Math.max(headerLen, MODEL_BYTES) : MODEL_BYTES;
   const parts: Uint8Array[] = [];
@@ -128,6 +129,8 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
       handleChunk(m.ch, m.data, m.last);
     }
   } catch (err) {
-    post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+    post(err instanceof AppError
+      ? { type: 'error', message: err.message, code: err.code, params: err.params }
+      : { type: 'error', message: err instanceof Error ? err.message : String(err) });
   }
 };

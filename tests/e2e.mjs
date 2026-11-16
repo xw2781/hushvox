@@ -16,14 +16,14 @@ try {
   const input = path.join(OUT, 'e2e-noisy.wav');
   writeWav16(input, mix.noisy);
 
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, locale: 'en-US' });
   await context.addInitScript(MARKS_SCRIPT);
   const reqs = watchRequests(context, srv.url);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(srv.url + '/');
+  await page.goto(srv.url + '/?lang=en');
 
   await step('idle page: title, privacy note, CSP meta', async () => {
     assert.match(await page.title(), /HushVox/i);
@@ -110,14 +110,148 @@ try {
   });
 
   await step('mobile viewport (390x844): no horizontal scroll, idle and result', async () => {
-    const m = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, acceptDownloads: true });
+    const m = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, acceptDownloads: true, locale: 'en-US' });
     await m.addInitScript(MARKS_SCRIPT);
     const mp = await m.newPage();
-    await mp.goto(srv.url + '/');
+    await mp.goto(srv.url + '/?lang=en');
     assert.equal(await mp.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'idle overflows');
     await processViaUi(mp, input);
     assert.equal(await mp.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'result overflows');
     await m.close();
+  });
+
+  // ---- i18n -------------------------------------------------------------------------------
+  const noOverflow = (p) => p.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+  const fresh = async (opts = {}) => {
+    const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US', ...opts });
+    return { c, p: await c.newPage() };
+  };
+  const SAMPLE = { zh: { h1: '去除人声录音中的噪音', nav: '工作原理', btn: '下载 WAV', html: 'zh-CN', title: /在浏览器中私密地去除/, desc: /免费开源的人声降噪工具/ },
+                   ja: { h1: '録音した声から、ノイズをなくします', nav: '仕組み', btn: 'WAV をダウンロード', html: 'ja', title: /ブラウザ内でプライバシーを守って除去/, desc: /無料のオープンソース音声ノイズ除去ツール/ },
+                   ko: { h1: '녹음된 목소리에서 노이즈를 없애 보세요', nav: '작동 방식', btn: 'WAV 다운로드', html: 'ko', title: /브라우저에서 비공개로/, desc: /무료 오픈 소스 음성 노이즈 제거 도구/ } };
+
+  await step('i18n: header switcher is visible, lists four languages in their own script, labelled accessibly', async () => {
+    const { c, p } = await fresh();
+    await p.goto(srv.url + '/?lang=en');
+    assert.ok(await p.isVisible('header.top #lang'));
+    assert.deepEqual(await p.locator('#lang option').allTextContents(), ['English', '简体中文', '日本語', '한국어']);
+    assert.equal(await p.getAttribute('#lang', 'aria-label'), 'Language');
+    assert.equal(await p.locator('html').getAttribute('lang'), 'en');
+    await p.selectOption('#lang', 'ja');
+    assert.equal(await p.getAttribute('#lang', 'aria-label'), '言語');
+    await c.close();
+  });
+
+  for (const [lang, x] of Object.entries(SAMPLE)) {
+    await step(`i18n: switching to ${lang} updates headline, nav, button, <html lang>, title, meta`, async () => {
+      const { c, p } = await fresh();
+      await p.goto(srv.url + '/?lang=en');
+      await p.selectOption('#lang', lang);
+      assert.match(await p.textContent('h1'), new RegExp(x.h1));
+      assert.equal((await p.textContent('header nav a:first-child')).trim(), x.nav);
+      assert.equal((await p.textContent('#dl-wav')).trim(), x.btn);
+      assert.equal(await p.evaluate(() => document.documentElement.lang), x.html);
+      assert.match(await p.title(), x.title);
+      assert.match(await p.getAttribute('meta[name="description"]', 'content'), x.desc);
+      assert.match(await p.getAttribute('meta[property="og:title"]', 'content'), /HushVox/);
+      assert.notEqual(await p.getAttribute('meta[property="og:description"]', 'content'), 'Free, open-source speech enhancement. DeepFilterNet3 runs locally as WebAssembly — your audio never leaves your device.');
+      assert.notEqual(await p.getAttribute('meta[name="twitter:title"]', 'content'), 'HushVox — private, in-browser voice noise removal');
+      assert.equal(new URL(p.url()).searchParams.get('lang'), lang);
+      // no raw message keys leaked, and no English leftovers in the privacy note
+      const leaks = await p.evaluate(() => [...document.querySelectorAll('[data-i18n],[data-i18n-html]')].filter((e) => e.textContent.trim() === (e.dataset.i18n || e.dataset.i18nHtml)).length);
+      assert.equal(leaks, 0);
+      assert.doesNotMatch(await p.textContent('.privacy-note'), /never leave/i);
+      await c.close();
+    });
+  }
+
+  await step('i18n: choice persists across reload (localStorage); URL param keeps other params and the hash', async () => {
+    const { c, p } = await fresh();
+    await p.goto(srv.url + '/?x=1&lang=en#faq');
+    await p.selectOption('#lang', 'ko');
+    assert.equal(await p.evaluate(() => localStorage.getItem('hushvox-lang')), 'ko');
+    const u = new URL(p.url());
+    assert.equal(u.searchParams.get('x'), '1'); assert.equal(u.searchParams.get('lang'), 'ko'); assert.equal(u.hash, '#faq');
+    await p.goto(srv.url + '/');
+    await p.reload();
+    assert.equal(await p.evaluate(() => document.documentElement.lang), 'ko');
+    assert.equal(await p.inputValue('#lang'), 'ko');
+    assert.match(await p.textContent('h1'), /노이즈/);
+    await c.close();
+  });
+
+  await step('i18n: ?lang= overrides stored preference (case-insensitive, zh-Hans / ja-JP aliases)', async () => {
+    const { c, p } = await fresh();
+    await p.goto(srv.url + '/?lang=zh');
+    await p.evaluate(() => localStorage.setItem('hushvox-lang', 'zh'));
+    for (const [q, html, re] of [['ja', 'ja', /ノイズ/], ['JA-jp', 'ja', /ノイズ/], ['zh-Hans', 'zh-CN', /噪音/], ['KO-kr', 'ko', /노이즈/], ['EN', 'en', /Take the noise/]]) {
+      await p.goto(srv.url + '/?lang=' + q);
+      assert.equal(await p.evaluate(() => document.documentElement.lang), html, q);
+      assert.match(await p.textContent('h1'), re, q);
+    }
+    await c.close();
+  });
+
+  await step('i18n: without ?lang= or storage, navigator language decides (zh-TW→zh, ja-JP→ja, ko-KR→ko, fr→en)', async () => {
+    for (const [loc, html] of [['zh-TW', 'zh-CN'], ['ja-JP', 'ja'], ['ko-KR', 'ko'], ['fr-FR', 'en']]) {
+      const { c, p } = await fresh({ locale: loc });
+      await p.goto(srv.url + '/');
+      assert.equal(await p.evaluate(() => document.documentElement.lang), html, loc);
+      await c.close();
+    }
+  });
+
+  await step('i18n: dynamic strings re-translate in place (error view, result view, aria labels) without losing state', async () => {
+    const { c, p } = await fresh();
+    await p.goto(srv.url + '/?lang=en');
+    const bad = path.join(OUT, 'not-audio-i18n.txt'); fs.writeFileSync(bad, 'hello');
+    await p.setInputFiles('#file', bad);
+    await p.waitForSelector('#state-error:not([hidden])', { timeout: 20000 });
+    assert.match(await p.textContent('#error-msg'), /couldn’t decode/);
+    await p.selectOption('#lang', 'ja');
+    assert.ok(await p.isVisible('#state-error'));
+    assert.match(await p.textContent('#error-msg'), /デコードできませんでした/);
+    await p.click('#error-back');
+    await p.setInputFiles('#file', input);
+    await p.waitForSelector('#state-result:not([hidden])', { timeout: 120000 });
+    assert.match(await p.textContent('#result-meta'), /モノラル/);
+    assert.equal(await p.getAttribute('#play', 'aria-label'), '再生');
+    await p.click('#play');
+    assert.equal(await p.getAttribute('#play', 'aria-label'), '一時停止');
+    await p.fill('#strength', '40'); await p.dispatchEvent('#strength', 'input');
+    await p.selectOption('#lang', 'ko');
+    assert.ok(await p.isVisible('#state-result'), 'result view must survive a language change');
+    assert.equal(await p.getAttribute('#play', 'aria-label'), '일시정지', 'playing state preserved');
+    assert.match(await p.textContent('#result-meta'), /모노/);
+    assert.equal(await p.inputValue('#strength'), '40');
+    assert.equal(await p.getAttribute('#strength', 'aria-valuetext'), '40%');
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#dl-mp3')]);
+    await dl.path();
+    assert.match(await p.textContent('#export-status'), /준비 완료/);
+    await p.selectOption('#lang', 'zh');
+    assert.match(await p.textContent('#export-status'), /已就绪/);
+    assert.equal(await p.getAttribute('.seg', 'aria-label'), '试听');
+    await c.close();
+  });
+
+  await step('i18n mobile (390x844): switcher visible, no horizontal overflow in zh/ja/ko, idle and result', async () => {
+    const { c, p } = await fresh({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+    await p.goto(srv.url + '/?lang=en');
+    assert.ok(await p.isVisible('#lang'));
+    for (const l of ['en', 'zh', 'ja', 'ko']) {
+      await p.selectOption('#lang', l);
+      assert.ok(await p.isVisible('#lang'), l);
+      assert.ok(await noOverflow(p), `idle overflows in ${l}`);
+      const box = await p.locator('#lang').boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= 390, `switcher off-screen in ${l}`);
+    }
+    await p.setInputFiles('#file', input);
+    await p.waitForSelector('#state-result:not([hidden])', { timeout: 120000 });
+    for (const l of ['ko', 'ja', 'zh']) {
+      await p.selectOption('#lang', l);
+      assert.ok(await noOverflow(p), `result overflows in ${l}`);
+    }
+    await c.close();
   });
 } catch (e) { console.error(e); failed++; } finally {
   await browser.close();

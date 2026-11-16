@@ -67,6 +67,12 @@ No claim is made that HushVox matches any particular commercial product.
 
 Open the site, drop a file, press play, flip Original/Enhanced (A / B), set Strength, export.
 
+### Languages
+
+The UI is available in **English, 简体中文, 日本語 and 한국어**. Use the language switcher in the header; the choice is remembered in your browser and applies instantly, without resetting your file. You can also force a language with a URL parameter, e.g. `?lang=zh`, `?lang=ja` or `?lang=ko` (`en`, `zh-CN`, `ja-JP`, `ko-KR`, … are accepted too). The URL parameter wins over the saved choice, which wins over your browser's language; English is the fallback. Translations are bundled in `src/i18n.ts` (no runtime fetching, so they work offline); to add a language, add a dictionary there and an `<option>` in `index.html`.
+
+![Result page in Simplified Chinese](shots/desktop-zh-result.png)
+
 ## Development
 
 ```bash
@@ -80,7 +86,7 @@ npm run shots          # regenerate shots/ and the README animation (needs ffmpe
 
 Playwright needs a browser once: `npx playwright install chromium` (on Linux CI add `--with-deps`). `npm run test:e2e` uses the committed fixtures in [tests/fixtures](tests/fixtures/README.md) (public-domain speech + CC0 noise, mixed at known SNR). Anything in `tests/local-fixtures/` is git-ignored and never used by CI.
 
-Layout: `src/audio/` (decode, worker, chunking, A/B player, WAV/MP3), `src/main.ts` (UI), `index.html` (landing/SEO content), `site.config.ts` (public URL in one place), `vite.config.ts` (CSP, robots.txt, sitemap.xml, FAQ JSON-LD).
+Layout: `src/i18n.ts` (translations and language switching), `src/audio/` (decode, worker, chunking, A/B player, WAV/MP3), `src/main.ts` (UI), `index.html` (landing/SEO content), `site.config.ts` (public URL in one place), `vite.config.ts` (CSP, robots.txt, sitemap.xml, FAQ JSON-LD).
 
 ## Deploy to GitHub Pages
 

@@ -1,6 +1,9 @@
 import { SAMPLE_RATE } from './protocol';
+import { AppError } from './errors';
 
-export class DecodeError extends Error {}
+export class DecodeError extends AppError {
+  constructor(code: 'read' | 'decode') { super(code, {}, code === 'read' ? 'Could not read that file.' : 'Your browser could not decode this file.'); }
+}
 
 /**
  * Decode any browser-supported audio/video file to a 48 kHz AudioBuffer (1 or 2 channels).
@@ -11,16 +14,14 @@ export async function decodeFile(file: File): Promise<AudioBuffer> {
   try {
     bytes = await file.arrayBuffer();
   } catch {
-    throw new DecodeError('Could not read that file.');
+    throw new DecodeError('read');
   }
   let decoded: AudioBuffer;
   try {
     const ctx = new OfflineAudioContext(1, 1, SAMPLE_RATE);
     decoded = await ctx.decodeAudioData(bytes);
   } catch {
-    throw new DecodeError(
-      "Your browser couldn't decode this file. Try WAV, MP3, M4A/AAC, OGG, FLAC or WebM — or a video file that contains an audio track in one of those formats.",
-    );
+    throw new DecodeError('decode');
   }
   if (decoded.numberOfChannels <= 2) return decoded;
   // Multichannel: let the browser's standard speaker downmix produce stereo.

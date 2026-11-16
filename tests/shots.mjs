@@ -13,13 +13,13 @@ const browser = await chromium.launch();
 const input = path.join(OUT, 'noisy-speech.wav');
 writeWav16(input, makeMix(5).noisy);
 
-async function session(name, viewport, scheme, dpr, frames) {
-  const ctx = await browser.newContext({ viewport, colorScheme: scheme, deviceScaleFactor: dpr });
+async function session(name, viewport, scheme, dpr, frames, lang = 'en', only = null) {
+  const ctx = await browser.newContext({ viewport, colorScheme: scheme, deviceScaleFactor: dpr, locale: 'en-US' });
   if (frames) await ctx.route('**/*.wasm', async (route) => { if (route.request().url().includes('df_bg')) await new Promise((r) => setTimeout(r, 1800)); await route.continue(); });
   const page = await ctx.newPage();
-  await page.goto(srv.url + '/');
+  await page.goto(`${srv.url}/?lang=${lang}`);
   await page.waitForTimeout(400);
-  await page.screenshot({ path: path.join(SHOTS, `${name}-idle.png`) });
+  if (only !== 'result') await page.screenshot({ path: path.join(SHOTS, `${name}-idle.png`) });
   if (frames) await page.screenshot({ path: path.join(FR, '1.png') });
   await page.setInputFiles('#file', input);
   if (frames) { await page.waitForSelector('#state-busy:not([hidden])'); await page.waitForTimeout(900); await page.screenshot({ path: path.join(FR, '2.png') }); }
@@ -39,10 +39,14 @@ await session('desktop-light', D, 'light', 1, true);
 await session('desktop-dark', D, 'dark', 1, false);
 await session('mobile-light', M, 'light', 2, false);
 await session('mobile-dark', M, 'dark', 2, false);
+// localized result pages (idle shots are skipped for these)
+await session('desktop-zh', D, 'light', 1, false, 'zh', 'result');
+await session('desktop-ja', D, 'light', 1, false, 'ja', 'result');
+await session('mobile-dark-ko', M, 'dark', 2, false, 'ko', 'result');
 // full-page landing capture (desktop light)
 {
   const ctx = await browser.newContext({ viewport: D, colorScheme: 'light' });
-  const p = await ctx.newPage(); await p.goto(srv.url + '/'); await p.waitForTimeout(400);
+  const p = await ctx.newPage(); await p.goto(srv.url + '/?lang=en'); await p.waitForTimeout(400);
   await p.screenshot({ path: path.join(SHOTS, 'desktop-light-fullpage.png'), fullPage: true });
   await ctx.close();
 }

@@ -1,4 +1,5 @@
 import { SAMPLE_RATE } from './protocol';
+import { AppError } from './errors';
 
 /** Mix function: fill `out` with blended samples of channel `ch` from sample `start`. */
 export type Mixer = (ch: number, start: number, out: Float32Array) => void;
@@ -20,7 +21,7 @@ const BLOCK = 48000;
 /** 16-bit PCM WAV, built block by block (no giant intermediate array). */
 export async function encodeWav(channels: number, length: number, mix: Mixer, onProgress?: (f: number) => void): Promise<Blob> {
   const dataBytes = length * channels * 2;
-  if (dataBytes > 0xffffffff - 44) throw new Error('This file is too long for a single WAV (4 GB limit). Try MP3.');
+  if (dataBytes > 0xffffffff - 44) throw new AppError('wavTooLong', {}, 'This file is too long for a single WAV (4 GB limit). Try MP3.');
   const head = new DataView(new ArrayBuffer(44));
   const str = (o: number, s: string) => { for (let i = 0; i < s.length; i++) head.setUint8(o + i, s.charCodeAt(i)); };
   str(0, 'RIFF'); head.setUint32(4, 36 + dataBytes, true); str(8, 'WAVE'); str(12, 'fmt ');
